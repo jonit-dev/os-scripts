@@ -217,6 +217,46 @@ configure_custom_aliases() {
         echo "Alias 'dcup' already exists in .zshrc."
     fi
 
+    # Add alias for dcre (restart) if it doesn't exist
+    if ! grep -q '^alias dcre=' "$ZSHRC_FILE"; then
+        echo 'alias dcre="docker-compose restart"' >> "$ZSHRC_FILE"
+        echo "Added alias 'dcre' to .zshrc."
+    else
+        echo "Alias 'dcre' already exists in .zshrc."
+    fi
+
+    # Add alias for dcstop if it doesn't exist
+    if ! grep -q '^alias dcstop=' "$ZSHRC_FILE"; then
+        echo 'alias dcstop="docker-compose stop"' >> "$ZSHRC_FILE"
+        echo "Added alias 'dcstop' to .zshrc."
+    else
+        echo "Alias 'dcstop' already exists in .zshrc."
+    fi
+
+    # Add alias for dcb (build) if it doesn't exist
+    if ! grep -q '^alias dcb=' "$ZSHRC_FILE"; then
+        echo 'alias dcb="docker-compose build"' >> "$ZSHRC_FILE"
+        echo "Added alias 'dcb' to .zshrc."
+    else
+        echo "Alias 'dcb' already exists in .zshrc."
+    fi
+
+    # Add alias for dcrm (remove) if it doesn't exist
+    if ! grep -q '^alias dcrm=' "$ZSHRC_FILE"; then
+        echo 'alias dcrm="docker-compose rm -f"' >> "$ZSHRC_FILE"
+        echo "Added alias 'dcrm' to .zshrc."
+    else
+        echo "Alias 'dcrm' already exists in .zshrc."
+    fi
+
+    # Add alias for dcd (down) if it doesn't exist
+    if ! grep -q '^alias dcd=' "$ZSHRC_FILE"; then
+        echo 'alias dcd="docker-compose down"' >> "$ZSHRC_FILE"
+        echo "Added alias 'dcd' to .zshrc."
+    else
+        echo "Alias 'dcd' already exists in .zshrc."
+    fi
+
     # Add generic dl function if it doesn't exist
     if ! grep -q '^dl()' "$ZSHRC_FILE"; then
         cat << 'EOF' >> "$ZSHRC_FILE"
@@ -235,7 +275,6 @@ EOF
         echo "Function 'dl' already exists in .zshrc."
     fi
 }
-
 
 # Main execution flow
 main() {
