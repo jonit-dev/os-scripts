@@ -209,6 +209,14 @@ configure_custom_aliases() {
         echo "Alias 'dlre' already exists in .zshrc."
     fi
 
+    # Add alias for dcup if it doesn't exist
+    if ! grep -q '^alias dcup=' "$ZSHRC_FILE"; then
+        echo 'alias dcup="docker-compose up -d"' >> "$ZSHRC_FILE"
+        echo "Added alias 'dcup' to .zshrc."
+    else
+        echo "Alias 'dcup' already exists in .zshrc."
+    fi
+
     # Add generic dl function if it doesn't exist
     if ! grep -q '^dl()' "$ZSHRC_FILE"; then
         cat << 'EOF' >> "$ZSHRC_FILE"
