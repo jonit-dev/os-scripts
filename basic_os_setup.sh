@@ -173,6 +173,45 @@ configure_ssh() {
     fi
 }
 
+# Function to add custom aliases and functions to .zshrc
+configure_custom_aliases() {
+    print_message "Adding custom aliases and functions to .zshrc..."
+
+    # Add alias for dlsapi if it doesn't exist
+    if ! grep -q '^alias dlsapi=' "$ZSHRC_FILE"; then
+        echo 'alias dlsapi="docker-compose logs -f --tail=100 startup-api"' >> "$ZSHRC_FILE"
+        echo "Added alias 'dlsapi' to .zshrc."
+    else
+        echo "Alias 'dlsapi' already exists in .zshrc."
+    fi
+
+    # Add alias for dlapi if it doesn't exist
+    if ! grep -q '^alias dlapi=' "$ZSHRC_FILE"; then
+        echo 'alias dlapi="docker-compose logs -f --tail=100 rpg-api"' >> "$ZSHRC_FILE"
+        echo "Added alias 'dlapi' to .zshrc."
+    else
+        echo "Alias 'dlapi' already exists in .zshrc."
+    fi
+
+    # Add generic dl function if it doesn't exist
+    if ! grep -q '^dl()' "$ZSHRC_FILE"; then
+        cat << 'EOF' >> "$ZSHRC_FILE"
+
+# Generic function to view logs of any container
+dl() {
+    if [ -z "$1" ]; then
+        echo "Usage: dl <container_name>"
+        return 1
+    fi
+    docker-compose logs -f --tail=100 "$1"
+}
+EOF
+        echo "Added function 'dl' to .zshrc."
+    else
+        echo "Function 'dl' already exists in .zshrc."
+    fi
+}
+
 # Main execution flow
 main() {
     update_system
@@ -187,6 +226,7 @@ main() {
     configure_oh_my_zsh
     install_powerline_fonts
     configure_ssh
+    configure_custom_aliases
 
     print_message "Setup complete! Please restart your terminal or run 'exec zsh' to apply the changes."
 
