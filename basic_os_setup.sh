@@ -193,6 +193,22 @@ configure_custom_aliases() {
         echo "Alias 'dlapi' already exists in .zshrc."
     fi
 
+    # Add alias for dlstop if it doesn't exist
+    if ! grep -q '^alias dlstop=' "$ZSHRC_FILE"; then
+        echo 'alias dlstop="docker-compose stop rpg-api"' >> "$ZSHRC_FILE"
+        echo "Added alias 'dlstop' to .zshrc."
+    else
+        echo "Alias 'dlstop' already exists in .zshrc."
+    fi
+
+    # Add alias for dlre (restart) if it doesn't exist
+    if ! grep -q '^alias dlre=' "$ZSHRC_FILE"; then
+        echo 'alias dlre="docker-compose restart rpg-api"' >> "$ZSHRC_FILE"
+        echo "Added alias 'dlre' to .zshrc."
+    else
+        echo "Alias 'dlre' already exists in .zshrc."
+    fi
+
     # Add generic dl function if it doesn't exist
     if ! grep -q '^dl()' "$ZSHRC_FILE"; then
         cat << 'EOF' >> "$ZSHRC_FILE"
@@ -211,6 +227,7 @@ EOF
         echo "Function 'dl' already exists in .zshrc."
     fi
 }
+
 
 # Main execution flow
 main() {
