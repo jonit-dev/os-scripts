@@ -44,6 +44,8 @@ MAINTENANCE_DIR="/usr/local/bin/maintenance_scripts"
 CRON_D_FILE="/etc/cron.d/linux_mint_maintenance"
 LOG_FILE="/var/log/linux_mint_maintenance.log"
 ALERT_STATE_DIR="/var/log/maintenance_alerts"
+CURRENT_USER=$(logname)  # Gets the name of the user who invoked sudo
+RKHUNTER_CONF="/etc/rkhunter.conf"  # Path to rkhunter configuration file
 
 # Prompt user for their email address
 read -p "Enter the email address to receive alerts: " USER_EMAIL
@@ -105,14 +107,52 @@ for pkg in "${PACKAGES[@]}"; do
     fi
 done
 
-# Update ClamAV database
+# ------------------------------
+# Update ClamAV Database
+# ------------------------------
 echo_info "Updating ClamAV virus database..."
+
+# Stop the freshclam daemon to avoid conflicts
+systemctl stop clamav-freshclam
+
+# Run freshclam manually
 freshclam
+
 if [ $? -eq 0 ]; then
     echo_success "ClamAV virus database updated."
 else
-    echo_error "Failed to update ClamAV virus database."
-    exit 1
+    echo_warning "Failed to update ClamAV virus database manually. Starting freshclam daemon."
+    # Start the freshclam daemon
+    systemctl start clamav-freshclam
+    echo_info "freshclam daemon started."
+    # Proceed without exiting
+fi
+
+# Start the freshclam daemon (ensure it's running)
+systemctl start clamav-freshclam
+
+# ------------------------------
+# Configure rkhunter
+# ------------------------------
+
+# Modify rkhunter configuration
+sed -i 's/^MIRRORS_MODE=1/MIRRORS_MODE=0/' "$RKHUNTER_CONF"
+sed -i 's/^UPDATE_MIRRORS=0/UPDATE_MIRRORS=1/' "$RKHUNTER_CONF"
+sed -i 's|^WEB_CMD="/bin/false"|WEB_CMD=""|' "$RKHUNTER_CONF"
+
+# Log the changes
+echo_info "Modified rkhunter configuration: MIRRORS_MODE set to 0, UPDATE_MIRRORS set to 1, and WEB_CMD set to empty."
+
+# ------------------------------
+# Refresh rkhunter Properties
+# ------------------------------
+echo_info "Updating rkhunter properties database..."
+rkhunter --propupd
+
+if [ $? -eq 0 ]; then
+    echo_success "rkhunter properties updated."
+else
+    echo_error "Failed to update rkhunter properties."
 fi
 
 # ------------------------------
@@ -158,7 +198,7 @@ cat > "$THUMBNAIL_SCRIPT" << EOF
 # Script to clear thumbnail cache for the primary user
 
 LOG_FILE="$LOG_FILE"
-CURRENT_USER=\$(logname)
+CURRENT_USER="$CURRENT_USER"
 
 echo "\$(date '+%Y-%m-%d %H:%M:%S') - Starting thumbnail cache cleanup." >> "\$LOG_FILE"
 rm -rf "/home/\$CURRENT_USER/.cache/thumbnails/"* >> "\$LOG_FILE" 2>&1
@@ -199,13 +239,13 @@ echo "\$(date '+%Y-%m-%d %H:%M:%S') - Starting rkhunter scan." >> "\$LOG_FILE"
 rkhunter --update >> "\$LOG_FILE" 2>&1
 
 # Run rkhunter scan and capture output
-SCAN_OUTPUT=\$(rkhunter --check --sk)
+SCAN_OUTPUT=\$(rkhunter --check --sk --nocolors)
 
 # Append scan output to log
 echo "\$SCAN_OUTPUT" >> "\$LOG_FILE"
 
 # Extract warnings or infections
-ISSUES=\echo "\$SCAN_OUTPUT" | grep -E "Warning|Infected"
+ISSUES=\$(echo "\$SCAN_OUTPUT" | grep -E "Warning|[^\[]*found" | grep -v -E "All results|System checks summary|File properties checks")
 
 if [ ! -z "\$ISSUES" ]; then
     # Create state file if it doesn't exist
@@ -214,11 +254,11 @@ if [ ! -z "\$ISSUES" ]; then
     fi
 
     # Compare current issues with previous alerts
-    NEW_ISSUES=\echo "\$ISSUES" | grep -v -F -f "\$STATE_FILE"
+    NEW_ISSUES=\$(echo "\$ISSUES" | grep -v -F -f "\$STATE_FILE")
 
     if [ ! -z "\$NEW_ISSUES" ]; then
         # Send email with new issues
-        echo -e "Subject:rkhunter Alert on \$(hostname)\n\nThe following issues were detected by rkhunter:\n\n\$NEW_ISSUES" | sendmail "\$EMAIL"
+        echo -e "Subject: rkhunter Alert on \$(hostname)\n\nThe following issues were detected by rkhunter:\n\n\$NEW_ISSUES" | sendmail "\$EMAIL"
         
         # Log the alert
         echo "\$(date '+%Y-%m-%d %H:%M:%S') - rkhunter detected new issues. Alert sent to \$EMAIL." >> "\$LOG_FILE"
@@ -245,17 +285,18 @@ LOG_FILE="$LOG_FILE"
 ALERT_STATE_DIR="$ALERT_STATE_DIR"
 STATE_FILE="\$ALERT_STATE_DIR/clamav_last_alert.txt"
 EMAIL="$USER_EMAIL"
+CURRENT_USER="$CURRENT_USER"
 
 echo "\$(date '+%Y-%m-%d %H:%M:%S') - Starting ClamAV scan." >> "\$LOG_FILE"
 
 # Run ClamAV scan and capture output
-SCAN_OUTPUT=\$(clamscan -r /home/\$(logname) --infected --remove)
+SCAN_OUTPUT=\$(clamscan -r /home/\$CURRENT_USER --infected --remove)
 
 # Append scan output to log
 echo "\$SCAN_OUTPUT" >> "\$LOG_FILE"
 
 # Extract infected files
-INFECTED=\echo "\$SCAN_OUTPUT" | grep "^/"
+INFECTED=\$(echo "\$SCAN_OUTPUT" | grep "^/")
 
 if [ ! -z "\$INFECTED" ]; then
     # Create state file if it doesn't exist
@@ -264,11 +305,11 @@ if [ ! -z "\$INFECTED" ]; then
     fi
 
     # Compare current infections with previous alerts
-    NEW_INFECTED=\echo "\$INFECTED" | grep -v -F -f "\$STATE_FILE"
+    NEW_INFECTED=\$(echo "\$INFECTED" | grep -v -F -f "\$STATE_FILE")
 
     if [ ! -z "\$NEW_INFECTED" ]; then
         # Send email with new infections
-        echo -e "Subject:ClamAV Alert on \$(hostname)\n\nThe following infections were detected and removed by ClamAV:\n\n\$NEW_INFECTED" | sendmail "\$EMAIL"
+        echo -e "Subject: ClamAV Alert on \$(hostname)\n\nThe following infections were detected and removed by ClamAV:\n\n\$NEW_INFECTED" | sendmail "\$EMAIL"
         
         # Log the alert
         echo "\$(date '+%Y-%m-%d %H:%M:%S') - ClamAV detected new infections. Alert sent to \$EMAIL." >> "\$LOG_FILE"
@@ -286,8 +327,6 @@ chmod +x "$CLAMAV_SCRIPT"
 echo_success "Created antivirus scan script with email notifications."
 
 # 7. Optional: Backup Configuration Files Script
-# Uncomment the following section if you want to enable configuration backups
-
 BACKUP_SCRIPT="$MAINTENANCE_DIR/backup_configs.sh"
 cat > "$BACKUP_SCRIPT" << EOF
 #!/bin/bash
@@ -298,15 +337,13 @@ BACKUP_DIR="/var/backups/configs"
 
 echo "\$(date '+%Y-%m-%d %H:%M:%S') - Starting configuration files backup." >> "\$LOG_FILE"
 mkdir -p "\$BACKUP_DIR"
-cp -r /etc "\$BACKUP_DIR" >> "\$LOG_FILE" 2>&1
+tar -czf "\$BACKUP_DIR/etc_backup_\$(date '+%Y%m%d').tar.gz" /etc >> "\$LOG_FILE" 2>&1
 echo "\$(date '+%Y-%m-%d %H:%M:%S') - Configuration files backup completed." >> "\$LOG_FILE"
 EOF
 chmod +x "$BACKUP_SCRIPT"
 echo_success "Created configuration files backup script."
 
 # 8. Optional: Monitor Disk Usage Script
-# Uncomment the following section if you want to enable disk usage monitoring
-
 DISK_MONITOR_SCRIPT="$MAINTENANCE_DIR/monitor_disk_usage.sh"
 cat > "$DISK_MONITOR_SCRIPT" << EOF
 #!/bin/bash
@@ -315,10 +352,10 @@ cat > "$DISK_MONITOR_SCRIPT" << EOF
 THRESHOLD=80
 EMAIL="$USER_EMAIL"
 
-USAGE=\$(df / | grep / | awk '{ print \$5}' | sed 's/%//g')
+USAGE=\$(df / | awk 'NR==2 {print \$5}' | sed 's/%//')
 
 if [ "\$USAGE" -gt "\$THRESHOLD" ]; then
-    echo "Disk usage is above \${THRESHOLD}%. Current usage: \${USAGE}%." | sendmail -s "Disk Usage Alert on \$(hostname)" "\$EMAIL"
+    echo -e "Subject: Disk Usage Alert on \$(hostname)\n\nDisk usage is above \${THRESHOLD}%. Current usage: \${USAGE}%." | sendmail "\$EMAIL"
 fi
 EOF
 chmod +x "$DISK_MONITOR_SCRIPT"
@@ -381,8 +418,22 @@ else
     exit 1
 fi
 
-# Update rkhunter data files
+# Enable and Start freshclam daemon
+systemctl enable clamav-freshclam
+systemctl start clamav-freshclam
+if [ $? -eq 0 ]; then
+    echo_success "freshclam daemon enabled and started."
+else
+    echo_error "Failed to enable/start freshclam daemon."
+    exit 1
+fi
+
+# ------------------------------
+# Update rkhunter Data Files
+# ------------------------------
+echo_info "Updating rkhunter data files..."
 rkhunter --update
+
 if [ $? -eq 0 ]; then
     echo_success "rkhunter data files updated."
 else

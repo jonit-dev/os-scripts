@@ -15,6 +15,11 @@ ZSH_SYNTAX_HIGHLIGHTING_DIR="$ZSH_CUSTOM/plugins/zsh-syntax-highlighting"
 SSH_KEY="$HOME/.ssh/id_rsa"
 ZSHRC_FILE="$HOME/.zshrc"
 
+# Docker Variables
+DOCKER_GPG_KEY_URL="https://download.docker.com/linux/ubuntu/gpg"
+DOCKER_REPO="deb [arch=$(dpkg --print-architecture) signed-by=/usr/share/keyrings/docker-archive-keyring.gpg] https://download.docker.com/linux/ubuntu $(lsb_release -cs) stable"
+DOCKER_COMPOSE_VERSION="2.20.2" # Update this to the latest version if needed
+
 # -------------------------------
 # Functions
 # -------------------------------
@@ -35,18 +40,16 @@ update_system() {
 # Function to install basic dependencies
 install_basic_dependencies() {
     print_message "Installing basic dependencies..."
-    sudo apt-get install -y git build-essential curl wget vim zsh libssl-dev cmake "$POWERLINE_FONTS"
+    sudo apt-get install -y git build-essential curl wget vim zsh libssl-dev cmake "$POWERLINE_FONTS" gnupg lsb-release
 }
 
-# Function to install VS Code
+# Function to install Visual Studio Code
 install_vscode() {
     print_message "Installing Visual Studio Code..."
-    wget -qO- https://packages.microsoft.com/keys/microsoft.asc | gpg --dearmor > packages.microsoft.gpg
-    sudo install -o root -g root -m 644 packages.microsoft.gpg /usr/share/keyrings/
-    sudo sh -c 'echo "deb [arch=$(dpkg --print-architecture) signed-by=/usr/share/keyrings/packages.microsoft.gpg] https://packages.microsoft.com/repos/code stable main" > /etc/apt/sources.list.d/vscode.list'
+    wget -qO- https://packages.microsoft.com/keys/microsoft.asc | gpg --dearmor | sudo tee /usr/share/keyrings/packages.microsoft.gpg > /dev/null
+    echo "deb [arch=$(dpkg --print-architecture) signed-by=/usr/share/keyrings/packages.microsoft.gpg] https://packages.microsoft.com/repos/code stable main" | sudo tee /etc/apt/sources.list.d/vscode.list
     sudo apt update -y
     sudo apt install -y code
-    rm packages.microsoft.gpg
 }
 
 # Function to install Git (redundant if installed in basic dependencies)
@@ -215,6 +218,14 @@ configure_custom_aliases() {
         ["dcb"]="docker-compose build"
         ["dcrm"]="docker-compose rm -f"
         ["dcd"]="docker-compose down"
+        # Docker Aliases
+        ["dps"]="docker ps"
+        ["dimages"]="docker images"
+        ["drm"]="docker rm"
+        ["dim"]="docker images"
+        ["dstopall"]="docker stop \$(docker ps -aq)"
+        ["drmall"]="docker rm \$(docker ps -aq)"
+        ["dclean"]="docker system prune -af"
     )
 
     # Iterate and add aliases if they don't exist
@@ -246,6 +257,67 @@ EOF
     fi
 }
 
+# Function to install Docker
+install_docker() {
+    print_message "Installing Docker Engine..."
+
+    # Remove older versions if any
+    sudo apt-get remove -y docker docker-engine docker.io containerd runc || true
+
+    # Add Docker's official GPG key
+    curl -fsSL "$DOCKER_GPG_KEY_URL" | sudo gpg --dearmor -o /usr/share/keyrings/docker-archive-keyring.gpg
+
+    # Set up the stable repository
+    echo "$DOCKER_REPO" | sudo tee /etc/apt/sources.list.d/docker.list > /dev/null
+
+    # Update package index
+    sudo apt update -y
+
+    # Install Docker Engine, CLI, and Containerd
+    sudo apt install -y docker-ce docker-ce-cli containerd.io
+
+    # Verify Docker installation
+    if sudo docker run hello-world >/dev/null 2>&1; then
+        echo "Docker installed successfully."
+    else
+        echo "Docker installation failed."
+        exit 1
+    fi
+}
+
+# Function to install Docker Compose
+install_docker_compose() {
+    print_message "Installing Docker Compose..."
+
+    # Download the specified version of Docker Compose
+    sudo curl -L "https://github.com/docker/compose/releases/download/v${DOCKER_COMPOSE_VERSION}/docker-compose-$(uname -s)-$(uname -m)" -o /usr/local/bin/docker-compose
+
+    # Apply executable permissions
+    sudo chmod +x /usr/local/bin/docker-compose
+
+    # Create a symbolic link to make docker-compose accessible
+    sudo ln -s /usr/local/bin/docker-compose /usr/bin/docker-compose || true
+
+    # Verify Docker Compose installation
+    if docker-compose --version >/dev/null 2>&1; then
+        echo "Docker Compose $(docker-compose --version) installed successfully."
+    else
+        echo "Docker Compose installation failed."
+        exit 1
+    fi
+}
+
+# Function to configure Docker permissions
+configure_docker_permissions() {
+    print_message "Configuring Docker permissions..."
+
+    # Add current user to the docker group
+    sudo usermod -aG docker "$USER"
+
+    echo "Added user '$USER' to the 'docker' group."
+    echo "To apply the new group membership, please log out and log back in."
+}
+
 # Function to clean up
 cleanup() {
     print_message "Cleaning up..."
@@ -265,6 +337,9 @@ main() {
     change_default_shell
     install_oh_my_zsh
     install_zsh_plugins
+    install_docker
+    install_docker_compose
+    configure_docker_permissions
     install_nvm
     configure_nvm
     install_node
@@ -274,7 +349,7 @@ main() {
     configure_ssh
     cleanup
 
-    print_message "Setup complete! Please restart your terminal or run 'exec zsh' to apply the changes."
+    print_message "Setup complete! Please restart your terminal or log out and log back in to apply the changes."
 
     echo "To verify:
 1. Zsh is set as the default shell.
@@ -282,8 +357,10 @@ main() {
 3. Plugins (zsh-autosuggestions and zsh-syntax-highlighting) are active.
 4. NVM is installed and configured.
 5. Node.js $(node -v) and Yarn $(yarn -v) are installed.
+6. Docker is installed and running. Verify with 'docker --version' and 'docker-compose --version'.
+7. Your user is added to the 'docker' group.
 
-You can now manage Node.js versions using NVM, e.g., 'nvm install <version>'."
+You can now manage Docker containers and Node.js versions using NVM, e.g., 'nvm install <version>'."
 }
 
 # Execute main function
