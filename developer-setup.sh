@@ -3,7 +3,9 @@
 # Exit immediately if a command exits with a non-zero status
 set -e
 
+# -------------------------------
 # Variables
+# -------------------------------
 OH_MY_ZSH_URL="https://raw.githubusercontent.com/ohmyzsh/ohmyzsh/master/tools/install.sh"
 NVM_INSTALL_URL="https://raw.githubusercontent.com/nvm-sh/nvm/v0.39.5/install.sh"
 POWERLINE_FONTS="fonts-powerline"
@@ -12,6 +14,10 @@ ZSH_AUTOSUGGESTIONS_DIR="$ZSH_CUSTOM/plugins/zsh-autosuggestions"
 ZSH_SYNTAX_HIGHLIGHTING_DIR="$ZSH_CUSTOM/plugins/zsh-syntax-highlighting"
 SSH_KEY="$HOME/.ssh/id_rsa"
 ZSHRC_FILE="$HOME/.zshrc"
+
+# -------------------------------
+# Functions
+# -------------------------------
 
 # Function to print messages with formatting
 print_message() {
@@ -26,9 +32,28 @@ update_system() {
     sudo apt update && sudo apt upgrade -y
 }
 
+# Function to install basic dependencies
 install_basic_dependencies() {
     print_message "Installing basic dependencies..."
-    sudo apt-get install -y libssl-dev cmake build-essential
+    sudo apt-get install -y git build-essential curl wget vim zsh libssl-dev cmake "$POWERLINE_FONTS"
+}
+
+# Function to install VS Code
+install_vscode() {
+    print_message "Installing Visual Studio Code..."
+    wget -qO- https://packages.microsoft.com/keys/microsoft.asc | gpg --dearmor > packages.microsoft.gpg
+    sudo install -o root -g root -m 644 packages.microsoft.gpg /usr/share/keyrings/
+    sudo sh -c 'echo "deb [arch=$(dpkg --print-architecture) signed-by=/usr/share/keyrings/packages.microsoft.gpg] https://packages.microsoft.com/repos/code stable main" > /etc/apt/sources.list.d/vscode.list'
+    sudo apt update -y
+    sudo apt install -y code
+    rm packages.microsoft.gpg
+}
+
+# Function to install Git (redundant if installed in basic dependencies)
+# Keeping it for clarity
+install_git() {
+    print_message "Ensuring Git is installed..."
+    sudo apt install -y git
 }
 
 # Function to install Zsh
@@ -125,6 +150,13 @@ install_node() {
     echo "Node.js $(node -v) and npm $(npm -v) have been installed."
 }
 
+# Function to install Yarn using NVM-managed npm
+install_yarn() {
+    print_message "Installing Yarn globally using npm..."
+    npm install --global yarn
+    echo "Yarn $(yarn -v) has been installed."
+}
+
 # Function to configure Oh My Zsh plugins in .zshrc
 configure_oh_my_zsh() {
     # Backup existing .zshrc if not already backed up
@@ -141,12 +173,6 @@ configure_oh_my_zsh() {
     else
         echo 'plugins=(git zsh-autosuggestions zsh-syntax-highlighting)' >> "$ZSHRC_FILE"
     fi
-}
-
-# Function to install Powerline fonts
-install_powerline_fonts() {
-    print_message "Installing Powerline fonts for better visuals..."
-    sudo apt install -y "$POWERLINE_FONTS"
 }
 
 # Function to generate SSH key
@@ -177,85 +203,29 @@ configure_ssh() {
 configure_custom_aliases() {
     print_message "Adding custom aliases and functions to .zshrc..."
 
-    # Add alias for dlsapi if it doesn't exist
-    if ! grep -q '^alias dlsapi=' "$ZSHRC_FILE"; then
-        echo 'alias dlsapi="docker-compose logs -f --tail=100 startup-api"' >> "$ZSHRC_FILE"
-        echo "Added alias 'dlsapi' to .zshrc."
-    else
-        echo "Alias 'dlsapi' already exists in .zshrc."
-    fi
+    # Define an array of aliases to add
+    declare -A aliases=(
+        ["dlsapi"]="docker-compose logs -f --tail=100 startup-api"
+        ["dlapi"]="docker-compose logs -f --tail=100 rpg-api"
+        ["dlstop"]="docker-compose stop rpg-api"
+        ["dlre"]="docker-compose restart rpg-api"
+        ["dcup"]="docker-compose up -d"
+        ["dcre"]="docker-compose restart"
+        ["dcstop"]="docker-compose stop"
+        ["dcb"]="docker-compose build"
+        ["dcrm"]="docker-compose rm -f"
+        ["dcd"]="docker-compose down"
+    )
 
-    # Add alias for dlapi if it doesn't exist
-    if ! grep -q '^alias dlapi=' "$ZSHRC_FILE"; then
-        echo 'alias dlapi="docker-compose logs -f --tail=100 rpg-api"' >> "$ZSHRC_FILE"
-        echo "Added alias 'dlapi' to .zshrc."
-    else
-        echo "Alias 'dlapi' already exists in .zshrc."
-    fi
-
-    # Add alias for dlstop if it doesn't exist
-    if ! grep -q '^alias dlstop=' "$ZSHRC_FILE"; then
-        echo 'alias dlstop="docker-compose stop rpg-api"' >> "$ZSHRC_FILE"
-        echo "Added alias 'dlstop' to .zshrc."
-    else
-        echo "Alias 'dlstop' already exists in .zshrc."
-    fi
-
-    # Add alias for dlre (restart) if it doesn't exist
-    if ! grep -q '^alias dlre=' "$ZSHRC_FILE"; then
-        echo 'alias dlre="docker-compose restart rpg-api"' >> "$ZSHRC_FILE"
-        echo "Added alias 'dlre' to .zshrc."
-    else
-        echo "Alias 'dlre' already exists in .zshrc."
-    fi
-
-    # Add alias for dcup if it doesn't exist
-    if ! grep -q '^alias dcup=' "$ZSHRC_FILE"; then
-        echo 'alias dcup="docker-compose up -d"' >> "$ZSHRC_FILE"
-        echo "Added alias 'dcup' to .zshrc."
-    else
-        echo "Alias 'dcup' already exists in .zshrc."
-    fi
-
-    # Add alias for dcre (restart) if it doesn't exist
-    if ! grep -q '^alias dcre=' "$ZSHRC_FILE"; then
-        echo 'alias dcre="docker-compose restart"' >> "$ZSHRC_FILE"
-        echo "Added alias 'dcre' to .zshrc."
-    else
-        echo "Alias 'dcre' already exists in .zshrc."
-    fi
-
-    # Add alias for dcstop if it doesn't exist
-    if ! grep -q '^alias dcstop=' "$ZSHRC_FILE"; then
-        echo 'alias dcstop="docker-compose stop"' >> "$ZSHRC_FILE"
-        echo "Added alias 'dcstop' to .zshrc."
-    else
-        echo "Alias 'dcstop' already exists in .zshrc."
-    fi
-
-    # Add alias for dcb (build) if it doesn't exist
-    if ! grep -q '^alias dcb=' "$ZSHRC_FILE"; then
-        echo 'alias dcb="docker-compose build"' >> "$ZSHRC_FILE"
-        echo "Added alias 'dcb' to .zshrc."
-    else
-        echo "Alias 'dcb' already exists in .zshrc."
-    fi
-
-    # Add alias for dcrm (remove) if it doesn't exist
-    if ! grep -q '^alias dcrm=' "$ZSHRC_FILE"; then
-        echo 'alias dcrm="docker-compose rm -f"' >> "$ZSHRC_FILE"
-        echo "Added alias 'dcrm' to .zshrc."
-    else
-        echo "Alias 'dcrm' already exists in .zshrc."
-    fi
-
-    # Add alias for dcd (down) if it doesn't exist
-    if ! grep -q '^alias dcd=' "$ZSHRC_FILE"; then
-        echo 'alias dcd="docker-compose down"' >> "$ZSHRC_FILE"
-        echo "Added alias 'dcd' to .zshrc."
-    else
-        echo "Alias 'dcd' already exists in .zshrc."
-    fi
+    # Iterate and add aliases if they don't exist
+    for alias_name in "${!aliases[@]}"; do
+        if ! grep -q "^alias $alias_name=" "$ZSHRC_FILE"; then
+            echo "alias $alias_name=\"${aliases[$alias_name]}\"" >> "$ZSHRC_FILE"
+            echo "Added alias '$alias_name' to .zshrc."
+        else
+            echo "Alias '$alias_name' already exists in .zshrc."
+        fi
+    done
 
     # Add generic dl function if it doesn't exist
     if ! grep -q '^dl()' "$ZSHRC_FILE"; then
@@ -276,10 +246,21 @@ EOF
     fi
 }
 
-# Main execution flow
+# Function to clean up
+cleanup() {
+    print_message "Cleaning up..."
+    sudo apt autoremove -y
+    sudo apt clean
+}
+
+# -------------------------------
+# Main Execution Flow
+# -------------------------------
 main() {
     update_system
     install_basic_dependencies
+    install_git
+    install_vscode
     install_zsh
     change_default_shell
     install_oh_my_zsh
@@ -287,19 +268,20 @@ main() {
     install_nvm
     configure_nvm
     install_node
+    install_yarn
     configure_oh_my_zsh
-    install_powerline_fonts
-    configure_ssh
     configure_custom_aliases
+    configure_ssh
+    cleanup
 
     print_message "Setup complete! Please restart your terminal or run 'exec zsh' to apply the changes."
 
     echo "To verify:
-    1. Zsh is set as the default shell.
-    2. Oh My Zsh is installed.
-    3. Plugins (zsh-autosuggestions and zsh-syntax-highlighting) are active.
-    4. NVM is installed and configured.
-    5. Node.js $(node -v) is installed.
+1. Zsh is set as the default shell.
+2. Oh My Zsh is installed.
+3. Plugins (zsh-autosuggestions and zsh-syntax-highlighting) are active.
+4. NVM is installed and configured.
+5. Node.js $(node -v) and Yarn $(yarn -v) are installed.
 
 You can now manage Node.js versions using NVM, e.g., 'nvm install <version>'."
 }
