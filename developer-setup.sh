@@ -17,8 +17,35 @@ ZSHRC_FILE="$HOME/.zshrc"
 
 # Docker Variables
 DOCKER_GPG_KEY_URL="https://download.docker.com/linux/ubuntu/gpg"
-DOCKER_REPO="deb [arch=$(dpkg --print-architecture) signed-by=/usr/share/keyrings/docker-archive-keyring.gpg] https://download.docker.com/linux/ubuntu $(lsb_release -cs) stable"
-DOCKER_COMPOSE_VERSION="2.20.2" # Update this to the latest version if needed
+# We'll set DOCKER_REPO after determining the correct codename
+DOCKER_COMPOSE_VERSION="2.21.0" # Updated to the latest version
+
+# Brave Browser Variables
+BRAVE_GPG_KEY_URL="https://brave-browser-apt-release.s3.brave.com/brave-core.asc"
+BRAVE_REPO="deb [arch=amd64 signed-by=/usr/share/keyrings/brave-browser-archive-keyring.gpg] https://brave-browser-apt-release.s3.brave.com/ stable main"
+
+# Get system architecture and Ubuntu codename
+ARCH=$(dpkg --print-architecture)
+CODENAME=$(lsb_release -cs)
+
+# Validate Architecture
+if [ "$ARCH" != "amd64" ]; then
+    echo "Unsupported architecture: $ARCH. This script supports only amd64."
+    exit 1
+fi
+
+# Validate Ubuntu Codename
+# List of supported Ubuntu codenames by Docker
+SUPPORTED_CODENAMES=("focal" "jammy" "bionic" "xenial" "hirsute" "impish" "kinetic" "jammy" "lunar")
+
+if [[ ! " ${SUPPORTED_CODENAMES[@]} " =~ " ${CODENAME} " ]]; then
+    echo "Ubuntu codename '$CODENAME' is not officially supported by Docker repositories."
+    echo "Attempting to use 'jammy' as a fallback. Please verify compatibility."
+    CODENAME="jammy"
+fi
+
+# Set Docker repository with validated codename
+DOCKER_REPO="deb [arch=$ARCH signed-by=/usr/share/keyrings/docker-archive-keyring.gpg] https://download.docker.com/linux/ubuntu $CODENAME stable"
 
 # -------------------------------
 # Functions
@@ -40,23 +67,26 @@ update_system() {
 # Function to install basic dependencies
 install_basic_dependencies() {
     print_message "Installing basic dependencies..."
-    sudo apt-get install -y git build-essential curl wget vim zsh libssl-dev cmake "$POWERLINE_FONTS" gnupg lsb-release
+    sudo apt-get install -y git build-essential curl wget vim zsh libssl-dev cmake "$POWERLINE_FONTS" gnupg lsb-release software-properties-common
 }
 
 # Function to install Visual Studio Code
 install_vscode() {
     print_message "Installing Visual Studio Code..."
     wget -qO- https://packages.microsoft.com/keys/microsoft.asc | gpg --dearmor | sudo tee /usr/share/keyrings/packages.microsoft.gpg > /dev/null
-    echo "deb [arch=$(dpkg --print-architecture) signed-by=/usr/share/keyrings/packages.microsoft.gpg] https://packages.microsoft.com/repos/code stable main" | sudo tee /etc/apt/sources.list.d/vscode.list
+    echo "deb [arch=$ARCH signed-by=/usr/share/keyrings/packages.microsoft.gpg] https://packages.microsoft.com/repos/code stable main" | sudo tee /etc/apt/sources.list.d/vscode.list
     sudo apt update -y
     sudo apt install -y code
 }
 
-# Function to install Git (redundant if installed in basic dependencies)
-# Keeping it for clarity
-install_git() {
-    print_message "Ensuring Git is installed..."
-    sudo apt install -y git
+# Function to install Brave Browser
+install_brave() {
+    print_message "Installing Brave Browser..."
+    sudo apt install -y curl
+    curl -fsSL "$BRAVE_GPG_KEY_URL" | sudo gpg --dearmor -o /usr/share/keyrings/brave-browser-archive-keyring.gpg
+    echo "$BRAVE_REPO" | sudo tee /etc/apt/sources.list.d/brave-browser-release.list
+    sudo apt update -y
+    sudo apt install -y brave-browser
 }
 
 # Function to install Zsh
@@ -300,7 +330,7 @@ install_docker_compose() {
 
     # Verify Docker Compose installation
     if docker-compose --version >/dev/null 2>&1; then
-        echo "Docker Compose $(docker-compose --version) installed successfully."
+        echo "Docker Compose $(docker-compose --version | awk '{print $3}') installed successfully."
     else
         echo "Docker Compose installation failed."
         exit 1
@@ -331,8 +361,8 @@ cleanup() {
 main() {
     update_system
     install_basic_dependencies
-    install_git
     install_vscode
+    install_brave
     install_zsh
     change_default_shell
     install_oh_my_zsh
@@ -358,10 +388,15 @@ main() {
 4. NVM is installed and configured.
 5. Node.js $(node -v) and Yarn $(yarn -v) are installed.
 6. Docker is installed and running. Verify with 'docker --version' and 'docker-compose --version'.
-7. Your user is added to the 'docker' group.
+7. Brave Browser is installed. Verify with 'brave-browser --version'.
+8. Your user is added to the 'docker' group.
 
 You can now manage Docker containers and Node.js versions using NVM, e.g., 'nvm install <version>'."
 }
 
 # Execute main function
 main
+
+echo "Proceeding to git setup..."
+
+./git-setup.sh
