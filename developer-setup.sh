@@ -285,6 +285,22 @@ EOF
     else
         echo "Function 'dl' already exists in .zshrc."
     fi
+
+    # Add git push shortcut function if it doesn't exist
+    if ! grep -q '^gtpush()' "$ZSHRC_FILE"; then
+        cat << 'EOF' >> "$ZSHRC_FILE"
+
+# Git shortcut function - Usage: gtpush "commit message"
+gtpush() {
+    git add .
+    git commit -m "$1"
+    git push
+}
+EOF
+        echo "Added function 'gp' to .zshrc."
+    else
+        echo "Function 'gp' already exists in .zshrc."
+    fi
 }
 
 # Function to install Docker
